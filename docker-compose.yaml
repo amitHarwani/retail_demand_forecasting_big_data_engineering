@@ -1,0 +1,52 @@
+version: '3.8'
+services:
+  minio: # minio for S3 Compatible Storage
+    image: minio/minio # minio Image
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Web console
+    volumes:
+      - ./minio_data:/data # (Bind Mount)   Persist data in a local volume - minio_data folder in local machine
+    environment: # Environment variables for username and password
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001" # After the container starts, start the minio server, serving the data folder and web console on port 9001
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 5s
+
+  create_buckets: # To create the three buckets initially
+    image: minio/mc # Minio client image - For interacting with object storage with unix commands
+    depends_on: # Start this service only after minio service is running
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set local http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb local/raw;
+      /usr/bin/mc mb local/transformed;
+      /usr/bin/mc mb local/forecasts;
+      exit 0;
+      "
+  spark-client:
+    build: . # Build from the Dockerfile
+    entrypoint: ["sleep", "infinity"] # Keep the container running indefinitely to run spark jobs
+    environment: # Enviornment variables: minio endpoint and credentials
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      # Set Spark environment variables if needed, though usually configs in script are enough
+      # Configures PySpark (the Python interface to Spark) to include two key packages
+      # enables spark to work with Object Storage, 
+      PYSPARK_SUBMIT_ARGS: "--packages org.apache.hadoop:hadoop-aws:3.3.1,com.amazonaws:aws-java-sdk-bundle:1.11.901 pyspark-shell"
+    volumes:
+      - ./dags:/opt/airflow/dags # Mount your dags folder to access scripts
+      - ./data:/opt/airflow/data # For local data files like split/sales_ingest_sim.csv
+      - ./models:/opt/airflow/models # To access locally downloaded models (if needed)
+      - ./forecasts:/opt/airflow/forecasts # To see local forecast outputs (if scripts write locally)
+    depends_on:
+      minio:
+        condition: service_healthy

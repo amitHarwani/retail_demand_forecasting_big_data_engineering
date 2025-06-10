@@ -1,0 +1,11 @@
+apache-airflow[postgres]
+apache-airflow[amazon]
+boto3
+pyspark
+pandas
+scikit-learn
+joblib
+pyarrow
+fastparquet
+flask
+psycopg2-binary
