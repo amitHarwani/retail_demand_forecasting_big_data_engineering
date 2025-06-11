@@ -4,6 +4,7 @@ import os
 import boto3
 from botocore.client import Config
 import argparse
+from datetime import date # New import
 
 # MinIO configuration
 MINIO_ENDPOINT = os.environ.get('MINIO_ENDPOINT', "http://localhost:9000")
@@ -19,7 +20,15 @@ S3_CLIENT = boto3.client(
 )
 
 def upload_df_to_minio_parquet(df, bucket_name, object_prefix):
-    """Uploads a Pandas DataFrame to MinIO as Parquet."""
+    """
+    Uploads a Pandas DataFrame to MinIO as Parquet.
+    Ensures 'date' column is written as Parquet DATE type.
+    """
+    # Convert 'date' column to Python date objects before writing to Parquet
+    # This ensures pyarrow writes it as a Parquet DATE type, which is more compatible.
+    if 'date' in df.columns:
+        df.loc[:, 'date'] = df['date'].dt.date # Convert datetime to date object
+
     local_parquet_path = f"./temp_daily_data_{pd.Timestamp.now().timestamp()}.parquet" # Unique name to avoid conflicts
     df.to_parquet(local_parquet_path, index=False)
     
@@ -42,7 +51,8 @@ def ingest_daily_slice(ingestion_date_str, source_file='./data/split/sales_inges
     """
     print(f"Ingesting daily sales slice for {ingestion_date_str} from {source_file}...")
     try:
-        full_ingest_sim_df = pd.read_csv(source_file, parse_dates=['date'])
+        full_ingest_sim_df = pd.read_csv(source_file, parse_dates=['date']) # Read as datetime
+        # Extract data for ingestion date
         daily_slice_df = full_ingest_sim_df[full_ingest_sim_df['date'].dt.strftime('%Y-%m-%d') == ingestion_date_str]
 
         if daily_slice_df.empty:
@@ -50,8 +60,7 @@ def ingest_daily_slice(ingestion_date_str, source_file='./data/split/sales_inges
             return
 
         # Define object path with date partitioning
-        # Example: raw/sales/year=2023/month=01/day=01/
-        date_obj = pd.to_datetime(ingestion_date_str).date()
+        date_obj = pd.to_datetime(ingestion_date_str).date() # Ensure date_obj is Python date
         object_prefix = f"sales/year={date_obj.year}/month={date_obj.month:02d}/day={date_obj.day:02d}"
         
         upload_df_to_minio_parquet(daily_slice_df, bucket_name, object_prefix)
