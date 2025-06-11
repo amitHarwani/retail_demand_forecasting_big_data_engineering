@@ -3,6 +3,10 @@ import os
 from datetime import timedelta
 import json
 
+
+SELECTED_ITEM_IDS = [
+   'e5b2b6f57ea7', '2c007023f650', '23b18d1f7da9', '0973df3ff57f', '99d388c37359', 'd9f5cbd8e676', 'f1eb9c33424e', 'b4f43c361b93', '6d284b4e9982', '58447f11c3b0'
+]
 def split_dataset_by_date(raw_data_path='./data/raw/', split_data_path='./data/split/'):
     """
     Splits the sales data into training and daily ingestion simulation sets.
@@ -18,6 +22,9 @@ def split_dataset_by_date(raw_data_path='./data/raw/', split_data_path='./data/s
     
     # Sort by date to ensure correct splits
     sales_df = sales_df.sort_values(by='date').reset_index(drop=True)
+
+    # Filtering out the 10 items
+    sales_df = sales_df[sales_df['item_id'].isin(SELECTED_ITEM_IDS)].reset_index(drop=True)
 
     min_date_sales = sales_df['date'].min()
     max_date_sales = sales_df['date'].max()
@@ -62,7 +69,11 @@ def split_dataset_by_date(raw_data_path='./data/raw/', split_data_path='./data/s
         raw_file_path = os.path.join(raw_data_path, f)
         split_file_path = os.path.join(split_data_path, f)
         if os.path.exists(raw_file_path):
-            pd.read_csv(raw_file_path).to_csv(split_file_path, index=False)
+            df = pd.read_csv(raw_file_path)
+            # Filter by selected item ids for all files except stores.
+            if f != 'stores.csv':
+                df = df[df['item_id'].isin(SELECTED_ITEM_IDS)].reset_index(drop=True)
+            df.to_csv(split_file_path, index=False)
             print(f"Copied {f} to split directory.")
         else:
             print(f"Warning: {raw_file_path} not found. Skipping.")
