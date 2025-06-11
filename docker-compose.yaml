@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   minio: # minio for S3 Compatible Storage
     image: minio/minio # minio Image
@@ -50,3 +49,98 @@ services:
     depends_on:
       minio:
         condition: service_healthy
+
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_USER: demand_forecast
+      POSTGRES_PASSWORD: demand_forecast
+      POSTGRES_DB: demand_forecast
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Airflow Dockerfile will be built from context (current directory)
+  # Initializes the Airflow database and create an admin user.
+  airflow-init:
+    build: .
+    command: bash -c "airflow db init && airflow users create --username admin --firstname admin --lastname admin --role Admin --email admin@example.com --password admin"
+    environment:
+      AIRFLOW_CFG_PATH: /opt/airflow/airflow.cfg
+      AIRFLOW_HOME: /opt/airflow # Airflow Installation dir
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags # Where to find the DAGS
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false' # Turn off sample workflows
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor # Local execution
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://demand_forecast:demand_forecast@postgres/demand_forecast # Database for airflow to store its metadata
+      AIRFLOW__WEBSERVER__RBAC: 'true' # For basic login into the web UI
+      AIRFLOW__WEBSERVER__AUTH_BACKENDS: 'airflow.www.security.authentication.basic_auth' # For basic login into the web UI
+      # Pass MinIO credentials to Airflow tasks
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      PG_CONN_STR: postgresql://demand_forecast:demand_forecast@postgres:5432/demand_forecast # For storing forecasts in postgres
+    volumes:
+      - ./dags:/opt/airflow/dags # Mount local dags directory for scripts to reside
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data # Mount local data directory for scripts to access
+      - ./models:/opt/airflow/models # Mount local models directory
+      - ./forecasts:/opt/airflow/forecasts # Mount local forecasts directory
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Hosts the airflow web server
+  airflow-webserver:
+    build: .
+    command: airflow webserver
+    ports:
+      - "8080:8080"
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://demand_forecast:demand_forecast@postgres/demand_forecast
+      AIRFLOW__WEBSERVER__RBAC: 'true'
+      AIRFLOW__WEBSERVER__AUTH_BACKENDS: 'airflow.www.security.authentication.basic_auth'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data # Mount local data directory
+      - ./models:/opt/airflow/models # Mount local models directory
+      - ./forecasts:/opt/airflow/forecasts # Mount local forecasts directory
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # Continuously looks for DAGs that need to be run (based on schedules) and kicks off their tasks.
+  airflow-scheduler:
+    build: .
+    command: airflow scheduler
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://demand_forecast:demand_forecast@postgres/demand_forecast
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data # Mount local data directory
+      - ./models:/opt/airflow/models # Mount local models directory
+      - ./forecasts:/opt/airflow/forecasts # Mount local forecasts directory
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+  
+volumes:
+  postgres-data:

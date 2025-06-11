@@ -177,12 +177,8 @@ def train_forecasting_model(training_end_date_str, transformed_data_path="s3a://
             import shutil
             shutil.rmtree(model_path_local) # Clear previous model if exists
         model.save(model_path_local)
-        print(f"Spark ML PipelineModel saved locally to {model_path_local}")
+        print(f"Spark ML PipelineModel saved to {model_path_local}")
 
-        # Upload the Spark ML PipelineModel to MinIO
-        minio_model_path = "models/spark_ml_pipeline_model"
-        upload_to_minio(model_path_local, "forecasts", minio_model_path)
-        print(f"Spark ML PipelineModel uploaded to MinIO forecasts/{minio_model_path}")
 
     except Exception as e:
         print(f"Error during Spark ML model training: {e}")
