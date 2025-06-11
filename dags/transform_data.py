@@ -123,22 +123,25 @@ def transform_and_feature_engineer(spark, process_date_str=None, mode="overwrite
     markdowns_agg = markdowns_df.groupBy("date", "item_id", "store_id") \
                                .agg(
                                    expr("sum(quantity)").alias("markdown_quantity"),
-                                   expr("avg(price)").alias("markdown_price")
+                                   expr("avg(price)").alias("markdown_price"),
+                                   expr("avg(normal_price)").alias("markdown_normal_price")
                                ).alias("m")
     
     # Joining enriched data with markdowns aggregated, and filling 0 for na
     enriched_df = enriched_df.join(markdowns_agg, on=["date", "item_id", "store_id"], how="left") \
-                             .na.fill(0, subset=['markdown_quantity', 'markdown_price'])
+                             .na.fill(0, subset=['markdown_quantity', 'markdown_price', "markdown_normal_price"])
 
     # Extracting max promo type code and sale price during the promo for an item at particular date and store
     discounts_agg = discounts_history_df.groupBy("date", "item_id", "store_id") \
                                      .agg(
                                          expr("max(promo_type_code)").alias("promo_type_code"),
-                                         expr("avg(sale_price_time_promo)").alias("promo_price")
+                                         expr("avg(sale_price_time_promo)").alias("promo_price"),
+                                         expr("avg(sale_price_before_promo)").alias("discount_price_before_promo")
                                      ).alias("d")
     
     # Joining the enriched data with the discounts data.
-    enriched_df = enriched_df.join(discounts_agg, on=["date", "item_id", "store_id"], how="left")
+    enriched_df = enriched_df.join(discounts_agg, on=["date", "item_id", "store_id"], how="left") \
+                             .na.fill(0, subset=['promo_price', 'discount_price_before_promo']) # Fill new feature
 
 
     # 3. Feature Engineering - Adding day of week, month, year, the week of the year, and whether the day is a weekend or not.
@@ -171,7 +174,7 @@ def transform_and_feature_engineer(spark, process_date_str=None, mode="overwrite
     numeric_cols_to_fill = [
         "lag_7_quantity", "lag_30_quantity", "lag_90_quantity", "lag_365_quantity",
         "rolling_mean_7_quantity", "rolling_mean_30_quantity",
-        "markdown_quantity", "markdown_price", "promo_price", "avg_base_price"
+        "markdown_quantity", "markdown_price", "markdown_normal_price", "promo_price", "avg_base_price", "discount_price_before_promo"
     ]
     enriched_df = enriched_df.na.fill(0, subset=numeric_cols_to_fill)
     categorical_cols_to_fill = ['dept_name', 'class_name', 'subclass_name', 'item_type',
@@ -184,7 +187,7 @@ def transform_and_feature_engineer(spark, process_date_str=None, mode="overwrite
     # `total_sales_amount` is explicitly EXCLUDED as an ML feature.
     final_features_df = enriched_df.select(
         "date", "item_id", "store_id", "total_quantity", # total_quantity is the TARGET
-        "avg_base_price", "markdown_quantity", "markdown_price", "promo_price",
+        "avg_base_price", "markdown_quantity", "markdown_price", "markdown_normal_price", "promo_price", "discount_price_before_promo",
         "on_promotion", "day_of_week", "month", "year", "week_of_year", "is_weekend", "day",
         "lag_7_quantity", "lag_30_quantity", "lag_90_quantity", "lag_365_quantity",
         "rolling_mean_7_quantity", "rolling_mean_30_quantity",
