@@ -27,7 +27,7 @@ def upload_df_to_minio_parquet(df, bucket_name, object_prefix):
     # Convert 'date' column to Python date objects before writing to Parquet
     # This ensures pyarrow writes it as a Parquet DATE type, which is more compatible.
     if 'date' in df.columns:
-        df.loc[:, 'date'] = df['date'].dt.date # Convert datetime to date object
+        df['date'] = df['date'].dt.date # Convert datetime to date object
 
     local_parquet_path = f"./temp_daily_data_{pd.Timestamp.now().timestamp()}.parquet" # Unique name to avoid conflicts
     df.to_parquet(local_parquet_path, index=False)
