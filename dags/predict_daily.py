@@ -9,7 +9,7 @@ import json
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, to_date, dayofweek, month, year, weekofyear, lag, avg, expr, lit, dayofmonth
 from pyspark.sql.window import Window
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from pyspark.ml import PipelineModel
 from pyspark.sql.types import StructType, StructField, DateType, StringType, DoubleType, IntegerType
 
@@ -250,6 +250,11 @@ def generate_daily_forecasts(forecast_start_date_str, prediction_horizon_days=7)
 
     # Write to PostgreSQL for Superset (still using Pandas for this part)
     table_name = "daily_product_store_forecasts"
+    # assuming PG_ENGINE is your SQLAlchemy Engine
+    with PG_ENGINE.begin() as conn:
+    # this removes all rows very efficiently
+        conn.execute(text(f"TRUNCATE TABLE public.{table_name}"))
+
     forecast_results_df.to_sql(table_name, PG_ENGINE, if_exists='append', index=False, method='multi')
     print(f"Forecasts also saved to PostgreSQL table: {table_name}")
     
