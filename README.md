@@ -1,6 +1,4 @@
 ### Original Architecture
-
-### Proof of Concept (PoC) Architecture
 ![Original Architecture](./OriginalArchitecture.jpeg)
 
 ### Proof of Concept (PoC) Architecture
