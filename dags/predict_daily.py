@@ -253,7 +253,7 @@ def generate_daily_forecasts(forecast_start_date_str, prediction_horizon_days=7)
     # assuming PG_ENGINE is your SQLAlchemy Engine
     with PG_ENGINE.begin() as conn:
     # this removes all rows very efficiently
-        conn.execute(text(f"TRUNCATE TABLE public.{table_name}"))
+        conn.execute(text(f"DROP TABLE IF EXISTS public.{table_name}"))
 
     forecast_results_df.to_sql(table_name, PG_ENGINE, if_exists='append', index=False, method='multi')
     print(f"Forecasts also saved to PostgreSQL table: {table_name}")
